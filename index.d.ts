@@ -1,4 +1,4 @@
-export interface DeepArray<T> extends Array<T | DeepArray<T>> {}
+type Depth = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 export type NeverSymbol = Record<symbol, never>;
 
@@ -12,13 +12,16 @@ export type UnionToTuple<T, R extends any[] = []> = [T] extends [never]
   ? R
   : UnionToTuple<Exclude<T, LastOf<T>>, [LastOf<T>, ...R]>;
 
-export type ValidatorToken = StringConstructor | NumberConstructor | BooleanConstructor | null | undefined;
-export type ValidatorDefinition = ValidatorToken | AbstractShape | DeepArray<ValidatorToken | AbstractShape>;
-export type AbstractShape = Record<string, ValidatorDefinition[]>;
-export type Types = string | number | boolean | null | undefined;
-export type TypeDefinition = Types | Entity | DeepArray<Types | Entity>;
+type Tokens = StringConstructor | NumberConstructor | BooleanConstructor | null | undefined;
+export type TokenDefinition = Tokens | AbstractShape | (TokenDefinition | AbstractShape)[];
 
-export type InferValidator<T> = T extends string
+export type AbstractShape = {
+  [key: string]: TokenDefinition;
+};
+
+export type InferToken<T, D extends number> = [D] extends [0]
+  ? never
+  : T extends string
   ? StringConstructor
   : T extends number
   ? NumberConstructor
@@ -27,16 +30,28 @@ export type InferValidator<T> = T extends string
   : T extends null | undefined
   ? T
   : T extends (infer U)[]
-  ? UnionToTuple<InferValidator<U>>
+  ? UnionToTuple<InferToken<U, Depth[D]>>
   : T extends Record<string, any>
-  ? Shape<T>
+  ? Shape<T, Depth[D]>
   : never;
 
-type Shape<T> = {
-  [K in keyof T]-?: UnionToTuple<InferValidator<T[K]>>;
+export type Shape<T extends Entity, D extends number = 10> = {
+  [K in keyof T]-?: UnionToTuple<InferToken<T[K], D>>;
 };
 
-export type InferType<T> = T extends StringConstructor
+type Types = string | number | boolean | null | undefined;
+
+export type JSONValue = Types | JSONArray | Entity;
+
+export type JSONArray = JSONValue[];
+
+export type Entity = NeverSymbol & {
+  [key: string]: JSONValue;
+};
+
+export type InferType<T, D extends number> = [D] extends [0]
+  ? never
+  : T extends StringConstructor
   ? string
   : T extends NumberConstructor
   ? number
@@ -44,35 +59,26 @@ export type InferType<T> = T extends StringConstructor
   ? boolean
   : T extends null | undefined
   ? T
-  : T extends AbstractShape
-  ? InferEntity<T>
   : T extends Array<infer U>
-  ? InferType<U>[]
+  ? InferType<U, Depth[D]>[]
+  : T extends AbstractShape
+  ? InferEntity<T, Depth[D]>
   : never;
 
-export type InferEntity<T extends AbstractShape> = {
-  [K in keyof T]: T[K] extends (infer U)[] ? InferType<U> : never;
+export type InferEntity<T extends AbstractShape, D extends number = 10> = {
+  [K in keyof T]: T[K] extends (infer U)[] ? InferType<U, D> : never;
 };
 
-export type Entity = NeverSymbol & {
-  [key: string]: TypeDefinition;
-};
-
-export type ParseResult<T extends AbstractShape | Entity> =
-  | { success: true; clone: T extends AbstractShape ? InferEntity<T> : T }
+export type ParseResult<T extends Entity> =
+  | { success: true; entity: T }
   | { success: false; keys: string[]; errors: unknown };
 
-export interface IShape<T extends AbstractShape | Entity> {
+export interface ISchema<T extends Entity> {
   parse(candidate: unknown): ParseResult<T>;
+  validate(candidate: unknown): candidate is T;
 }
 
-export interface ISchemaFactory {
-  createSchema<T extends AbstractShape | Entity>(shape: T extends AbstractShape ? T : Shape<T>): ISchema<T>;
+export declare class SchemaFactory {
+  createSchema<T extends AbstractShape>(shape: T): ISchema<InferEntity<T>>;
+  createSchema<T extends Entity>(shape: Shape<T>): ISchema<T>;
 }
-
-export interface SchemaFactoryConstructor {
-  new (): ISchemaFactory;
-  (): ISchemaFactory;
-}
-
-export declare const SchemaFactory: SchemaFactoryConstructor;

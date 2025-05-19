@@ -155,11 +155,11 @@ describe("Framework", () => {
 
     const result1 = schema.parse(input1);
     expect(result1.success).toBe(true);
-    expect(result1.clone).toEqual(input1);
+    expect(result1.entity).toEqual(input1);
 
     const result2 = schema.parse(input2);
     expect(result2.success).toBe(true);
-    expect(result2.clone).toEqual(input2);
+    expect(result2.entity).toEqual(input2);
   });
 
   test("should fail validation and return error keys", () => {
@@ -182,6 +182,6 @@ describe("Framework", () => {
     expect(result.keys).toContain("name");
     expect(result.keys).toContain("age");
     expect(result.keys).toContain("tags.0");
-    expect(result.clone).toBeUndefined();
+    expect(result.entity).toBeUndefined();
   });
 });
