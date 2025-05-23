@@ -12,7 +12,7 @@ type UnionToTuple<T, R extends any[] = []> = [T] extends [never]
 
 type Tokens = StringConstructor | NumberConstructor | BooleanConstructor | null | undefined;
 
-type TokenDefinition = Tokens | AbstractShape | (TokenDefinition | AbstractShape)[];
+type TokenDefinition = Tokens | AbstractShape | ReadonlyArray<TokenDefinition | AbstractShape>;
 
 export type AbstractShape = {
   [key: string]: TokenDefinition;
@@ -76,9 +76,12 @@ export type InferEntity<T extends AbstractShape> = {
   [K in keyof T]: T[K] extends (infer U)[] ? InferType<U, 10> : never;
 };
 
+type Keys<D extends number> = D extends 0 ? string[] : Array<string | Keys<Depth[D]>>;
+
 export type ParseResult<T extends Entity> =
   | { success: true; entity: T }
-  | { success: false; keys: string[]; errors: unknown };
+  | { success: false; keys: Keys<10> }
+  | { success: false; errors: unknown };
 
 export interface ISchema<T extends Entity> {
   parse(candidate: unknown): ParseResult<T>;
@@ -86,7 +89,8 @@ export interface ISchema<T extends Entity> {
 }
 
 export declare class SchemaFactory {
-  createSchema<T extends Entity | AbstractShape>(
-    shape: T extends Entity ? Shape<T> : T
-  ): T extends AbstractShape ? ISchema<InferEntity<T>> : T extends Entity ? ISchema<T> : never;
+  createSchema<T extends Entity>(shape: Shape<T>): ISchema<T>;
+  createSchema<T extends AbstractShape>(shape: T): ISchema<InferEntity<T>>;
+  createSchema<T extends Entity[]>(shape: { [K in keyof T]: Shape<T[K]> }): ISchema<T[number]>;
+  createSchema<T extends AbstractShape[]>(shape: { [K in keyof T]: T[K] }): ISchema<InferEntity<T[number]>>;
 }

@@ -1,19 +1,34 @@
 const { SchemaFactory } = require("..");
 
-describe("Framework", () => {
+describe("SchemaFactory and Schema behavior", () => {
   const schemaFactory = new SchemaFactory();
 
-  test("should initialize the schema factory", () => {
+  test("should instantiate SchemaFactory correctly", () => {
     expect(schemaFactory).toBeInstanceOf(SchemaFactory);
   });
 
-  test("should create a schema from valid shape", () => {
+  test("should create a schema object with parse method", () => {
     const schema = schemaFactory.createSchema({});
     expect(schema).toHaveProperty("parse");
     expect(typeof schema.parse).toBe("function");
   });
 
-  test("should validate and extract full input with complex shape", () => {
+  test("should validate inputs correctly with simple shape", () => {
+    const shape = {
+      id: [String],
+      field: [Number],
+    };
+
+    const validInput = { id: "", field: 42 };
+    const invalidInput = {};
+
+    const schema = schemaFactory.createSchema(shape);
+
+    expect(schema.validate(validInput)).toBe(true);
+    expect(schema.validate(invalidInput)).toBe(false);
+  });
+
+  test("should validate and extract complex nested input successfully", () => {
     const validShape = {
       name: [String],
       age: [Number],
@@ -162,7 +177,57 @@ describe("Framework", () => {
     expect(result2.entity).toEqual(input2);
   });
 
-  test("should fail validation and return error keys", () => {
+  test("should correctly validate union type fields in shape", () => {
+    const firstShape = { str: [String] };
+    const secondShape = { num: [Number] };
+
+    const shape = {
+      field: [firstShape, secondShape],
+    };
+
+    const validFirst = {
+      field: { str: "" },
+    };
+
+    const invalidSecond = {
+      field: { bool: 42 },
+    };
+
+    const schema = schemaFactory.createSchema(shape);
+
+    const result1 = schema.parse(validFirst);
+    expect(result1.success).toBe(true);
+    expect(result1.entity).toEqual(validFirst);
+
+    const result2 = schema.parse(invalidSecond);
+    expect(result2.success).toBe(false);
+    expect(result2.keys).toEqual([["field.str"], ["field.num"]]);
+  });
+
+  test("should validate union shapes properly", () => {
+    const firstShape = { id: [String] };
+    const secondShape = { field: [Number] };
+
+    const firstValid = { id: "" };
+    const secondValid = { field: 42 };
+    const invalid = {};
+
+    const schema = schemaFactory.createSchema([firstShape, secondShape]);
+
+    const result1 = schema.parse(firstValid);
+    expect(result1.success).toBe(true);
+    expect(result1.entity).toEqual(firstValid);
+
+    const result2 = schema.parse(secondValid);
+    expect(result2.success).toBe(true);
+    expect(result2.entity).toEqual(secondValid);
+
+    const result3 = schema.parse(invalid);
+    expect(result3.success).toBe(false);
+    expect(result3.keys).toEqual([["id"], ["field"]]);
+  });
+
+  test("should fail validation and return error keys for invalid input", () => {
     const validShape = {
       name: [String],
       age: [Number],
