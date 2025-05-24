@@ -249,4 +249,46 @@ describe("SchemaFactory and Schema behavior", () => {
     expect(result.keys).toContain("tags.0");
     expect(result.entity).toBeUndefined();
   });
+
+  test("parseArray should return success when all elements are valid", () => {
+    const shape = {
+      id: [String],
+      value: [Number],
+    };
+
+    const input = [
+      { id: "a", value: 1 },
+      { id: "b", value: 2 },
+      { id: "c", value: 3 },
+    ];
+
+    const schema = schemaFactory.createSchema(shape);
+    const result = schema.parseArray(input);
+
+    console.log(result);
+
+    expect(result.success).toBe(true);
+    expect(result.entity).toEqual(input);
+  });
+
+  test("parseArray should return keys if some elements are invalid", () => {
+    const shape = {
+      id: [String],
+      value: [Number],
+    };
+
+    const input = [
+      { id: "a", value: 1 },
+      { id: "b", value: "wrong" },
+      { id: 42, value: 3 },
+    ];
+
+    const schema = schemaFactory.createSchema(shape);
+    const result = schema.parseArray(input);
+
+    console.log(result);
+
+    expect(result.success).toBe(false);
+    expect(result.keys).toEqual([[], ["value"], ["id"]]);
+  });
 });

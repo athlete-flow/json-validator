@@ -78,6 +78,10 @@ export type InferEntity<T extends AbstractShape> = {
 
 type Keys<D extends number> = D extends 0 ? string[] : Array<string | Keys<Depth[D]>>;
 
+type Collection<T extends object> = {
+  [K in keyof T]: T[K] extends Shape<infer U> ? (U extends Entity ? ISchema<U> : naver) : ISchema<InferEntity<T[K]>>;
+};
+
 export type ParseResult<T extends Entity> =
   | { success: true; entity: T }
   | { success: false; keys: Keys<10> }
@@ -86,6 +90,9 @@ export type ParseResult<T extends Entity> =
 export interface ISchema<T extends Entity> {
   parse(candidate: unknown): ParseResult<T>;
   validate(candidate: unknown): candidate is T;
+
+  parseArray(candidate: unknown): ParseResult<T[]>;
+  validateArray(candidate: unknown): candidate is T[];
 }
 
 export declare class SchemaFactory {
@@ -93,4 +100,7 @@ export declare class SchemaFactory {
   createSchema<T extends AbstractShape>(shape: T): ISchema<InferEntity<T>>;
   createSchema<T extends Entity[]>(shape: { [K in keyof T]: Shape<T[K]> }): ISchema<T[number]>;
   createSchema<T extends AbstractShape[]>(shape: { [K in keyof T]: T[K] }): ISchema<InferEntity<T[number]>>;
+
+  createCollection<T extends Record<string, AbstractShape>>(shapes: T): Collection<T>;
+  createCollection<T extends Record<string, Shape>>(shapes: T): Collection<T>;
 }
