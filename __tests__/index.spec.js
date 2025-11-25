@@ -291,4 +291,185 @@ describe("SchemaFactory and Schema behavior", () => {
     expect(result.success).toBe(false);
     expect(result.keys).toEqual([[], ["value"], ["id"]]);
   });
+
+  test("validateArray should work correctly", () => {
+    const shape = {
+      id: [String],
+      active: [Boolean],
+    };
+
+    const schema = schemaFactory.createSchema(shape);
+
+    const validArray = [
+      { id: "1", active: true },
+      { id: "2", active: false },
+    ];
+
+    const invalidArray = [
+      { id: "1", active: true },
+      { id: 123, active: false },
+    ];
+
+    expect(schema.validateArray(validArray)).toBe(true);
+    expect(schema.validateArray(invalidArray)).toBe(false);
+
+    expect(() => schema.validateArray("not an array")).toThrow("Candidate is not array");
+  });
+
+  test("createCollection should create multiple schemas", () => {
+    const collection = schemaFactory.createCollection({
+      user: { name: [String], age: [Number] },
+      post: { title: [String], views: [Number] },
+      comment: { text: [String], userId: [String] },
+    });
+
+    expect(collection.user).toHaveProperty("parse");
+    expect(collection.post).toHaveProperty("parse");
+    expect(collection.comment).toHaveProperty("parse");
+
+    const userResult = collection.user.parse({ name: "Alice", age: 30 });
+    expect(userResult.success).toBe(true);
+
+    const postResult = collection.post.parse({ title: "Hello", views: 100 });
+    expect(postResult.success).toBe(true);
+
+    const invalidUser = collection.user.parse({ name: 123, age: "wrong" });
+    expect(invalidUser.success).toBe(false);
+  });
+
+  test("should handle edge cases with null and undefined inputs", () => {
+    const schema = schemaFactory.createSchema({ name: [String] });
+
+    const nullResult = schema.parse(null);
+    expect(nullResult.success).toBe(false);
+
+    const undefinedResult = schema.parse(undefined);
+    expect(undefinedResult.success).toBe(false);
+
+    const arrayResult = schema.parse([]);
+    expect(arrayResult.success).toBe(false);
+
+    const numberResult = schema.parse(42);
+    expect(numberResult.success).toBe(false);
+
+    const stringResult = schema.parse("test");
+    expect(stringResult.success).toBe(false);
+  });
+
+  test("should handle empty schema and empty arrays", () => {
+    const emptySchema = schemaFactory.createSchema({});
+
+    const result1 = emptySchema.parse({});
+    expect(result1.success).toBe(true);
+    expect(result1.entity).toEqual({});
+
+    const result2 = emptySchema.parse({ extra: "field" });
+    expect(result2.success).toBe(true);
+    expect(result2.entity).toEqual({});
+
+    const arraySchema = schemaFactory.createSchema({ items: [[String]] });
+    const emptyArrayResult = arraySchema.parse({ items: [] });
+    expect(emptyArrayResult.success).toBe(true);
+    expect(emptyArrayResult.entity.items).toEqual([]);
+  });
+
+  test("should ignore extra fields in objects", () => {
+    const schema = schemaFactory.createSchema({
+      name: [String],
+      age: [Number],
+    });
+
+    const input = {
+      name: "Bob",
+      age: 25,
+      extra: "ignored",
+      another: 123,
+    };
+
+    const result = schema.parse(input);
+    expect(result.success).toBe(true);
+    expect(result.entity).toEqual({ name: "Bob", age: 25 });
+    expect(result.entity.extra).toBeUndefined();
+  });
+
+  test("should handle deeply nested structures", () => {
+    const deepSchema = schemaFactory.createSchema({
+      level1: [
+        {
+          level2: [
+            {
+              level3: [
+                {
+                  level4: [
+                    {
+                      value: [String],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const deepInput = {
+      level1: {
+        level2: {
+          level3: {
+            level4: {
+              value: "deep",
+            },
+          },
+        },
+      },
+    };
+
+    const result = deepSchema.parse(deepInput);
+    expect(result.success).toBe(true);
+    expect(result.entity).toEqual(deepInput);
+  });
+
+  test("should handle arrays with union types correctly", () => {
+    const schema = schemaFactory.createSchema({
+      mixed: [[String, Number, null]],
+    });
+
+    const input = {
+      mixed: ["text", 42, null, "more", 100, null],
+    };
+
+    const result = schema.parse(input);
+    expect(result.success).toBe(true);
+    expect(result.entity).toEqual(input);
+  });
+
+  test("should provide correct error paths for nested validation failures", () => {
+    const schema = schemaFactory.createSchema({
+      users: [
+        [
+          {
+            name: [String],
+            contacts: [
+              {
+                email: [String],
+              },
+            ],
+          },
+        ],
+      ],
+    });
+
+    const input = {
+      users: [
+        { name: "Alice", contacts: { email: "alice@test.com" } },
+        { name: 123, contacts: { email: 456 } },
+      ],
+    };
+
+    const result = schema.parse(input);
+    expect(result.success).toBe(false);
+    expect(result.keys).toContain("users.1.name");
+    expect(result.keys).toContain("users.1.contacts.email");
+  });
 });

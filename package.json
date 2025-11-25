@@ -1,7 +1,7 @@
 {
   "name": "athlete-json-validator",
-  "version": "0.3.0",
-  "description": "",
+  "version": "0.3.1",
+  "description": "TypeScript-compatible JSON schema validation library with strong type inference and zero dependencies",
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
@@ -11,7 +11,16 @@
     "type": "git",
     "url": ""
   },
-  "keywords": [],
+  "keywords": [
+    "validation",
+    "validator",
+    "schema",
+    "json",
+    "typescript",
+    "type-safe",
+    "runtime-validation",
+    "data-validation"
+  ],
   "author": "Denis Redcade",
   "license": "ISC",
   "devDependencies": {

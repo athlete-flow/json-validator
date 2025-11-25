@@ -79,13 +79,13 @@ export type InferEntity<T extends AbstractShape> = {
 type Keys<D extends number> = D extends 0 ? string[] : Array<string | Keys<Depth[D]>>;
 
 type Collection<T extends object> = {
-  [K in keyof T]: T[K] extends Shape<infer U> ? (U extends Entity ? ISchema<U> : naver) : ISchema<InferEntity<T[K]>>;
+  [K in keyof T]: T[K] extends Shape<infer U> ? (U extends Entity ? ISchema<U> : never) : ISchema<InferEntity<T[K]>>;
 };
 
 export type ParseResult<T extends Entity> =
   | { success: true; entity: T }
   | { success: false; keys: Keys<10> }
-  | { success: false; errors: unknown };
+  | { success: false; error: unknown };
 
 export interface ISchema<T extends Entity> {
   parse(candidate: unknown): ParseResult<T>;
