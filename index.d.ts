@@ -1,106 +1,345 @@
+/**
+ * Represents the tuple of decreasing depth counters used to bound recursive inference.
+ */
 type Depth = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
+/**
+ * Represents a brand that forbids symbol keys on entities.
+ */
 type NeverSymbol = Record<symbol, never>;
 
-type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
+/**
+ * Flattens an intersection into a single object type for readable hovers.
+ */
+type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-type LastOf<T> = UnionToIntersection<T extends any ? (x: T) => void : never> extends (x: infer L) => void ? L : never;
+/**
+ * Converts a union type into an intersection type.
+ */
+type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
 
-type UnionToTuple<T, R extends any[] = []> = [T] extends [never]
+/**
+ * Extracts the last member of a union type.
+ */
+type LastOf<T> =
+  UnionToIntersection<T extends unknown ? (x: T) => void : never> extends (x: infer L) => void ? L : never;
+
+/**
+ * Converts a union type into a tuple of its members.
+ */
+type UnionToTuple<T, R extends unknown[] = []> = [T] extends [never]
   ? R
   : UnionToTuple<Exclude<T, LastOf<T>>, [LastOf<T>, ...R]>;
 
-type Tokens = StringConstructor | NumberConstructor | BooleanConstructor | null | undefined;
+/**
+ * Represents the primitive schema tokens. `Date` is supported for non-JSON sources such as database rows.
+ */
+export type Tokens = StringConstructor | NumberConstructor | BooleanConstructor | DateConstructor | null | undefined;
 
-type TokenDefinition = Tokens | AbstractShape | ReadonlyArray<TokenDefinition | AbstractShape>;
+/**
+ * Represents anything that can appear in a field position of a shape:
+ * a primitive token, a nested shape, or a list of definitions.
+ */
+export type TokenDefinition = Tokens | AbstractShape | ReadonlyArray<TokenDefinition>;
 
+/**
+ * Represents a runtime shape definition.
+ * @example
+ * const userShape = {
+ *   name: [String],
+ *   age: [Number],
+ *   note: [null, String],
+ *   tags: [[String]],
+ * } as const;
+ */
 export type AbstractShape = {
   [key: string]: TokenDefinition;
 };
 
-type InferToken<T, D extends number> = [D] extends [0]
-  ? never
-  : T extends string
-  ? StringConstructor
-  : T extends number
-  ? NumberConstructor
-  : T extends boolean
-  ? BooleanConstructor
-  : T extends null | undefined
-  ? T
-  : T extends (infer U)[]
-  ? Readonly<UnionToTuple<InferToken<U, Depth[D]>>>
-  : T extends Record<string, any>
-  ? ShapeWithDepth<T, Depth[D]>
-  : never;
+/**
+ * The key of a record shape: `{ "*": definition }` validates every own enumerable value of the candidate.
+ * Cannot be combined with other keys.
+ * @example
+ * const dictShape = { [WILDCARD_KEY]: [String, Number] };
+ */
+export declare const WILDCARD_KEY: "*";
 
-type ShapeWithDepth<T extends Entity, D extends number = 10> = {
-  [K in keyof T]-?: Readonly<UnionToTuple<InferToken<T[K], D>>>;
-};
+/**
+ * Represents the primitive values an entity may contain.
+ */
+type Types = string | number | boolean | Date | null | undefined;
 
-export type Shape<T extends Entity> = {
-  [K in keyof T]-?: Readonly<UnionToTuple<InferToken<T[K], 10>>>;
-};
-
-type Types = string | number | boolean | null | undefined;
-
+/**
+ * Represents any value an entity field may hold.
+ */
 type JSONValue = Types | JSONArray | Entity;
 
+/**
+ * Represents an array of entity values.
+ */
 type JSONArray = JSONValue[];
 
+/**
+ * Represents a plain data object composed of JSON-compatible values (plus `Date`).
+ */
 export type Entity = NeverSymbol & {
   [key: string]: JSONValue;
 };
 
+/**
+ * Infers the schema token for a single entity value.
+ */
+type InferToken<T, D extends number> = [D] extends [0]
+  ? never
+  : T extends string
+    ? StringConstructor
+    : T extends number
+      ? NumberConstructor
+      : T extends boolean
+        ? BooleanConstructor
+        : T extends Date
+          ? DateConstructor
+          : T extends null | undefined
+            ? T
+            : T extends (infer U)[]
+              ? Readonly<UnionToTuple<InferToken<U, Depth[D]>>>
+              : T extends Entity
+                ? ShapeWithDepth<T, Depth[D]>
+                : never;
+
+/**
+ * Derives a shape from an entity type with a bounded recursion depth.
+ */
+type ShapeWithDepth<T extends Entity, D extends number = 10> = {
+  [K in keyof T]-?: Readonly<UnionToTuple<InferToken<T[K], D>>>;
+};
+
+/**
+ * Derives a runtime shape from an entity type (type -> shape).
+ * Works with type aliases composed of JSON-compatible values; interfaces need an index signature.
+ * @example
+ * type Account = { id: string; amount: number; labels: string[] };
+ * const accountShape: Shape<Account> = {
+ *   id: [String],
+ *   amount: [Number],
+ *   labels: [[String]],
+ * };
+ */
+export type Shape<T extends Entity> = {
+  [K in keyof T]-?: Readonly<UnionToTuple<InferToken<T[K], 10>>>;
+};
+
+/**
+ * Infers the entity value type for a single schema token.
+ */
 type InferType<T, D extends number> = [D] extends [0]
   ? never
   : T extends StringConstructor
-  ? string
-  : T extends NumberConstructor
-  ? number
-  : T extends BooleanConstructor
-  ? boolean
-  : T extends null | undefined
-  ? T
-  : T extends Array<infer U>
-  ? InferType<U, Depth[D]>[]
-  : T extends AbstractShape
-  ? InferEntityWithDepth<T, Depth[D]>
-  : never;
+    ? string
+    : T extends NumberConstructor
+      ? number
+      : T extends BooleanConstructor
+        ? boolean
+        : T extends DateConstructor
+          ? Date
+          : T extends null | undefined
+            ? T
+            : T extends ReadonlyArray<infer U>
+              ? InferType<U, Depth[D]>[]
+              : T extends AbstractShape
+                ? InferEntityWithDepth<T, Depth[D]>
+                : never;
 
-export type InferEntityWithDepth<T extends AbstractShape, D extends number = 10> = {
-  [K in keyof T]: T[K] extends (infer U)[] ? InferType<U, D> : never;
-};
+/**
+ * Infers the value type of a field definition, treating a list as a union of its options.
+ */
+type FieldType<T, D extends number> = T extends ReadonlyArray<infer U> ? InferType<U, D> : InferType<T, D>;
 
-export type InferEntity<T extends AbstractShape> = {
-  [K in keyof T]: T[K] extends (infer U)[] ? InferType<U, 10> : never;
-};
+/**
+ * Selects the keys whose definition admits `undefined`.
+ */
+type OptionalFieldKeys<T extends AbstractShape, D extends number> = {
+  [K in keyof T]: undefined extends FieldType<T[K], D> ? K : never;
+}[keyof T];
 
-type Keys<D extends number> = D extends 0 ? string[] : Array<string | Keys<Depth[D]>>;
+/**
+ * Derives an entity type from a shape with a bounded recursion depth.
+ * Fields whose definition admits `undefined` become optional: extraction omits keys absent from the candidate.
+ */
+export type InferEntityWithDepth<T extends AbstractShape, D extends number = 10> = "*" extends keyof T
+  ? Record<string, FieldType<T["*"], D>>
+  : Simplify<
+      { [K in Exclude<keyof T, OptionalFieldKeys<T, D>>]: FieldType<T[K], D> } & {
+        [K in OptionalFieldKeys<T, D>]?: FieldType<T[K], D>;
+      }
+    >;
 
-type Collection<T extends object> = {
-  [K in keyof T]: T[K] extends Shape<infer U> ? (U extends Entity ? ISchema<U> : never) : ISchema<InferEntity<T[K]>>;
-};
+/**
+ * Derives an entity type from a runtime shape (shape -> type).
+ * @example
+ * const shape = { id: [String], note: [undefined, String] } as const;
+ * type User = InferEntity<typeof shape>;
+ * // { id: string; note?: string | undefined }
+ */
+export type InferEntity<T extends AbstractShape> = InferEntityWithDepth<T, 10>;
 
-export type ParseResult<T extends Entity> =
-  | { success: true; entity: T }
-  | { success: false; keys: Keys<10> }
+/**
+ * Represents a primitive validation predicate.
+ */
+export type Predicate = (value: unknown) => boolean;
+
+/**
+ * Represents validation error paths. Dot notation addresses nested fields and array indices,
+ * the root is addressed by the empty string, and a failed union contributes one nested group per option.
+ * @example
+ * ["users.1.name", ["f.s"], ["f.n"]]
+ */
+export type KeyErrors = Array<string | KeyErrors>;
+
+/**
+ * Represents the result of a safe parse: the typed data, the error paths,
+ * or an exception thrown by the candidate itself.
+ */
+export type SafeParseResult<T> =
+  | { success: true; data: T }
+  | { success: false; keys: KeyErrors }
   | { success: false; error: unknown };
 
-export interface ISchema<T extends Entity> {
-  parse(candidate: unknown): ParseResult<T>;
-  validate(candidate: unknown): candidate is T;
+/**
+ * Represents the result of a single validation pass.
+ * `value` holds the extracted entity and is meaningful only when `errors` is empty.
+ */
+export type ValidationResult = {
+  errors: KeyErrors;
+  value: unknown;
+};
 
-  parseArray(candidate: unknown): ParseResult<T[]>;
-  validateArray(candidate: unknown): candidate is T[];
+/**
+ * Interface for compiled validators produced by the factory.
+ */
+export interface IValidator {
+  /**
+   * Validates a value and extracts its whitelisted copy in a single pass.
+   * @param { unknown } value - The value to validate.
+   * @param { string } path - The error path prefix, empty at the root.
+   * @returns { ValidationResult } The collected errors and the extracted value.
+   */
+  validate(value: unknown, path: string): ValidationResult;
 }
 
-export declare class SchemaFactory {
-  createSchema<T extends Entity>(shape: Shape<T>): ISchema<T>;
-  createSchema<T extends AbstractShape>(shape: T): ISchema<InferEntity<T>>;
-  createSchema<T extends Entity[]>(shape: { [K in keyof T]: Shape<T[K]> }): ISchema<T[number]>;
-  createSchema<T extends AbstractShape[]>(shape: { [K in keyof T]: T[K] }): ISchema<InferEntity<T[number]>>;
+/**
+ * Interface for shape-driven parsing.
+ */
+export interface IShapeValidator {
+  parse<T extends AbstractShape>(shape: T, candidate: unknown): InferEntity<T>;
+  safeParse<T extends AbstractShape>(shape: T, candidate: unknown): SafeParseResult<InferEntity<T>>;
+  parseArray<T extends AbstractShape>(shape: T, candidate: unknown): InferEntity<T>[];
+  safeParseArray<T extends AbstractShape>(shape: T, candidate: unknown): SafeParseResult<InferEntity<T>[]>;
+}
 
-  createCollection<T extends Record<string, AbstractShape>>(shapes: T): Collection<T>;
-  createCollection<T extends Record<string, Shape>>(shapes: T): Collection<T>;
+/**
+ * Thrown at schema-compile time when a shape contains an unsupported definition:
+ * an unknown token, an empty union, or a wildcard combined with other keys.
+ * Escapes the safe methods too - a broken shape is a programmer error, not a data error.
+ */
+export declare class UnsupportedValidatorError extends Error {
+  readonly definition: unknown;
+  constructor(definition: unknown);
+}
+
+/**
+ * Thrown by `parse` and `parseArray` when the candidate does not match the shape.
+ */
+export declare class ValidationFailedError extends Error {
+  readonly keys: KeyErrors;
+  constructor(keys: KeyErrors);
+}
+
+/**
+ * Thrown by `parseArray` and captured by `safeParseArray` when the candidate is not an array.
+ */
+export declare class CandidateNotArrayError extends Error {
+  constructor();
+}
+
+/**
+ * The predicates behind the primitive tokens. `Number` rejects `NaN`.
+ */
+export declare const PRIMITIVE_PREDICATES: ReadonlyMap<TokenDefinition, Predicate>;
+
+/**
+ * Compiles shapes into validators, caching them by shape identity:
+ * reusing one shape object costs one compilation.
+ */
+export declare class ValidatorFactory {
+  /**
+   * Compiles a shape into a validator or returns the cached one.
+   * @param { AbstractShape } shape - The shape to compile.
+   * @returns { IValidator } The compiled validator.
+   * @example
+   * const validator = factory.compile(userShape);
+   */
+  compile(shape: AbstractShape): IValidator;
+}
+
+/**
+ * The stateless entry point; one instance can be shared for the whole application.
+ * Validation and extraction happen in a single pass over own enumerable properties:
+ * each property is read exactly once and the result is a fresh copy
+ * containing only the keys declared in the shape.
+ * @example
+ * const validator = new Validator();
+ * const user = validator.parse(userShape, request.body);
+ */
+export declare class Validator implements IShapeValidator {
+  constructor(validatorFactory?: ValidatorFactory);
+
+  /**
+   * Validates the candidate and returns the typed entity.
+   * @template T
+   * @param { T } shape - The shape to validate against.
+   * @param { unknown } candidate - The value to validate.
+   * @returns { InferEntity<T> } The extracted entity.
+   * @throws { ValidationFailedError } When the candidate does not match; carries the error paths in `keys`.
+   * @example
+   * const user = validator.parse({ name: [String] }, { name: "Alice" });
+   */
+  parse<T extends AbstractShape>(shape: T, candidate: unknown): InferEntity<T>;
+
+  /**
+   * Validates the candidate without throwing on data errors.
+   * @template T
+   * @param { T } shape - The shape to validate against.
+   * @param { unknown } candidate - The value to validate.
+   * @returns { SafeParseResult<InferEntity<T>> } The data, the error paths, or a captured exception.
+   * @example
+   * const result = validator.safeParse(userShape, request.body);
+   * if (result.success) console.log(result.data);
+   */
+  safeParse<T extends AbstractShape>(shape: T, candidate: unknown): SafeParseResult<InferEntity<T>>;
+
+  /**
+   * Validates an array of entities against one shape.
+   * @template T
+   * @param { T } shape - The shape each element must match.
+   * @param { unknown } candidate - The array to validate.
+   * @returns { InferEntity<T>[] } The extracted entities.
+   * @throws { CandidateNotArrayError } When the candidate is not an array.
+   * @throws { ValidationFailedError } When elements do not match; `keys` holds one group per element.
+   * @example
+   * const users = validator.parseArray(userShape, rows);
+   */
+  parseArray<T extends AbstractShape>(shape: T, candidate: unknown): InferEntity<T>[];
+
+  /**
+   * Validates an array of entities without throwing on data errors.
+   * @template T
+   * @param { T } shape - The shape each element must match.
+   * @param { unknown } candidate - The array to validate.
+   * @returns { SafeParseResult<InferEntity<T>[]> } The entities, the per-element error paths, or a captured exception.
+   * @example
+   * const result = validator.safeParseArray(userShape, rows);
+   * if (!result.success && "keys" in result) console.log(result.keys); // [[], ["value"], ["id"]]
+   */
+  safeParseArray<T extends AbstractShape>(shape: T, candidate: unknown): SafeParseResult<InferEntity<T>[]>;
 }

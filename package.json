@@ -1,11 +1,22 @@
 {
   "name": "athlete-json-validator",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "TypeScript-compatible JSON schema validation library with strong type inference and zero dependencies",
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
-    "test": "jest"
+    "test": "jest --coverage"
+  },
+  "jest": {
+    "collectCoverageFrom": ["index.js", "lib/**/*.js"],
+    "coverageThreshold": {
+      "global": {
+        "branches": 100,
+        "functions": 100,
+        "lines": 100,
+        "statements": 100
+      }
+    }
   },
   "repository": {
     "type": "git",
