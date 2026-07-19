@@ -109,6 +109,32 @@ else result.error;                      // exception thrown by the candidate its
 
 Invalid *shapes* still throw `UnsupportedValidatorError` — a broken schema is a programmer error, not a data error.
 
+### `validate(shape, candidate)`
+
+Returns a plain boolean and narrows the candidate to the inferred type — nothing is extracted, the value keeps its own identity and its extra keys:
+
+```typescript
+const payload: unknown = await request.json();
+
+if (validator.validate(userShape, payload)) {
+  payload.name.toUpperCase(); // payload is InferEntity<typeof userShape>
+}
+```
+
+Use it when you only need the type guard; use `parse`/`safeParse` when you want a whitelisted copy.
+
+### `validateArray(shape, candidate)`
+
+The same guard for arrays: `true` only if the candidate is an array and every element matches. A non-array candidate is `false`, not an exception:
+
+```typescript
+if (validator.validateArray(userShape, rows)) {
+  rows.forEach((row) => row.age); // rows is InferEntity<typeof userShape>[]
+}
+```
+
+Both guards still throw `UnsupportedValidatorError` for a broken shape, and propagate exceptions thrown by the candidate's own getters.
+
 ### `parseArray(shape, candidate)` / `safeParseArray(shape, candidate)`
 
 Validate an array of entities against one shape. A non-array candidate produces `CandidateNotArrayError`. On failure, `keys` holds one group per element, empty for valid elements:
@@ -189,6 +215,8 @@ const accountShape: Shape<Account> = {
 ```
 
 `Shape<T>` works with type aliases composed of JSON-compatible values (plus `Date`). Interfaces need an index signature to qualify.
+
+The options of a field may be listed in **any order** — `[String, undefined]` and `[undefined, String]` are equally valid — but the set must stay exhaustive: `POOL_MAX: [String]` for `POOL_MAX?: string` is a type error, because at runtime the key would become required.
 
 ## License
 

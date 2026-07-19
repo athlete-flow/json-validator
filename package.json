@@ -1,6 +1,6 @@
 {
   "name": "athlete-json-validator",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "TypeScript-compatible JSON schema validation library with strong type inference and zero dependencies",
   "main": "index.js",
   "types": "index.d.ts",

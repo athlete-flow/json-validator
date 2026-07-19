@@ -359,6 +359,56 @@ describe("parseArray and safeParseArray", () => {
   });
 });
 
+describe("validate and validateArray", () => {
+  const validator = new Validator();
+  const shape = { id: [String], note: [undefined, String] };
+
+  test("validate returns a plain boolean", () => {
+    expect(validator.validate(shape, { id: "a" })).toBe(true);
+    expect(validator.validate(shape, { id: "a", note: "n", extra: 1 })).toBe(true);
+    expect(validator.validate(shape, { id: 1 })).toBe(false);
+    expect(validator.validate(shape, null)).toBe(false);
+  });
+
+  test("validate never extracts: the candidate keeps its identity and extra keys", () => {
+    const candidate = { id: "a", extra: 1 };
+    expect(validator.validate(shape, candidate)).toBe(true);
+    expect(candidate.extra).toBe(1);
+  });
+
+  test("validate agrees with safeParse on every candidate", () => {
+    for (const candidate of [{ id: "a" }, { id: 1 }, {}, null, [], new Date()]) {
+      expect(validator.validate(shape, candidate)).toBe(validator.safeParse(shape, candidate).success);
+    }
+  });
+
+  test("validateArray returns false for non-arrays instead of throwing", () => {
+    for (const candidate of ["str", 1, null, undefined, {}, new Date()]) {
+      expect(validator.validateArray(shape, candidate)).toBe(false);
+    }
+  });
+
+  test("validateArray checks every element and accepts the empty array", () => {
+    expect(validator.validateArray(shape, [])).toBe(true);
+    expect(validator.validateArray(shape, [{ id: "a" }, { id: "b", note: "n" }])).toBe(true);
+    expect(validator.validateArray(shape, [{ id: "a" }, { id: 2 }])).toBe(false);
+    expect(validator.validateArray(shape, [{ id: "a" }, null])).toBe(false);
+  });
+
+  test("both propagate schema errors and candidate exceptions", () => {
+    expect(() => validator.validate({ a: [] }, {})).toThrow(UnsupportedValidatorError);
+    expect(() => validator.validateArray({ a: [] }, [])).toThrow(UnsupportedValidatorError);
+    const boom = new Error("boom");
+    const evil = {
+      get id() {
+        throw boom;
+      },
+    };
+    expect(() => validator.validate(shape, evil)).toThrow(boom);
+    expect(() => validator.validateArray(shape, [evil])).toThrow(boom);
+  });
+});
+
 describe("schema compilation cache", () => {
   test("compiles a shape once and reuses it by identity", () => {
     const factory = new ValidatorFactory();

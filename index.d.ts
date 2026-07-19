@@ -14,22 +14,10 @@ type NeverSymbol = Record<symbol, never>;
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
 /**
- * Converts a union type into an intersection type.
+ * Converts a union type into every tuple of its members, so the options of a
+ * field may be listed in any order while the set itself stays exhaustive.
  */
-type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
-
-/**
- * Extracts the last member of a union type.
- */
-type LastOf<T> =
-  UnionToIntersection<T extends unknown ? (x: T) => void : never> extends (x: infer L) => void ? L : never;
-
-/**
- * Converts a union type into a tuple of its members.
- */
-type UnionToTuple<T, R extends unknown[] = []> = [T] extends [never]
-  ? R
-  : UnionToTuple<Exclude<T, LastOf<T>>, [LastOf<T>, ...R]>;
+type Permutation<T, U = T> = [T] extends [never] ? [] : U extends U ? [U, ...Permutation<Exclude<T, U>>] : never;
 
 /**
  * Represents the primitive schema tokens. `Date` is supported for non-JSON sources such as database rows.
@@ -102,7 +90,7 @@ type InferToken<T, D extends number> = [D] extends [0]
           : T extends null | undefined
             ? T
             : T extends (infer U)[]
-              ? Readonly<UnionToTuple<InferToken<U, Depth[D]>>>
+              ? Readonly<Permutation<InferToken<U, Depth[D]>>>
               : T extends Entity
                 ? ShapeWithDepth<T, Depth[D]>
                 : never;
@@ -111,7 +99,7 @@ type InferToken<T, D extends number> = [D] extends [0]
  * Derives a shape from an entity type with a bounded recursion depth.
  */
 type ShapeWithDepth<T extends Entity, D extends number = 10> = {
-  [K in keyof T]-?: Readonly<UnionToTuple<InferToken<T[K], D>>>;
+  [K in keyof T]-?: Readonly<Permutation<InferToken<T[K], D>>>;
 };
 
 /**
@@ -126,7 +114,7 @@ type ShapeWithDepth<T extends Entity, D extends number = 10> = {
  * };
  */
 export type Shape<T extends Entity> = {
-  [K in keyof T]-?: Readonly<UnionToTuple<InferToken<T[K], 10>>>;
+  [K in keyof T]-?: Readonly<Permutation<InferToken<T[K], 10>>>;
 };
 
 /**
@@ -233,8 +221,10 @@ export interface IValidator {
 export interface IShapeValidator {
   parse<T extends AbstractShape>(shape: T, candidate: unknown): InferEntity<T>;
   safeParse<T extends AbstractShape>(shape: T, candidate: unknown): SafeParseResult<InferEntity<T>>;
+  validate<T extends AbstractShape>(shape: T, candidate: unknown): candidate is InferEntity<T>;
   parseArray<T extends AbstractShape>(shape: T, candidate: unknown): InferEntity<T>[];
   safeParseArray<T extends AbstractShape>(shape: T, candidate: unknown): SafeParseResult<InferEntity<T>[]>;
+  validateArray<T extends AbstractShape>(shape: T, candidate: unknown): candidate is InferEntity<T>[];
 }
 
 /**
@@ -317,6 +307,30 @@ export declare class Validator implements IShapeValidator {
    * if (result.success) console.log(result.data);
    */
   safeParse<T extends AbstractShape>(shape: T, candidate: unknown): SafeParseResult<InferEntity<T>>;
+
+  /**
+   * Checks the candidate against the shape and narrows it to the inferred entity type.
+   * Nothing is extracted: the candidate keeps its own identity and its extra keys.
+   * @template T
+   * @param { T } shape - The shape to validate against.
+   * @param { unknown } candidate - The value to check.
+   * @returns { boolean } `true` if the candidate matches, narrowing it to `InferEntity<T>`.
+   * @example
+   * if (validator.validate(userShape, payload)) payload.name.toUpperCase();
+   */
+  validate<T extends AbstractShape>(shape: T, candidate: unknown): candidate is InferEntity<T>;
+
+  /**
+   * Checks that the candidate is an array whose every element matches the shape,
+   * and narrows it to the inferred entity array. A non-array candidate is `false`, never a throw.
+   * @template T
+   * @param { T } shape - The shape each element must match.
+   * @param { unknown } candidate - The value to check.
+   * @returns { boolean } `true` if every element matches, narrowing the candidate to `InferEntity<T>[]`.
+   * @example
+   * if (validator.validateArray(userShape, rows)) rows.forEach((row) => row.name);
+   */
+  validateArray<T extends AbstractShape>(shape: T, candidate: unknown): candidate is InferEntity<T>[];
 
   /**
    * Validates an array of entities against one shape.
